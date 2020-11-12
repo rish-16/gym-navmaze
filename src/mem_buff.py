@@ -13,13 +13,14 @@ class MemBuff:
     def build_network(self):
         # resnet = ResNet50(include_top=False, weights='imagenet', input_tensor=None, input_shape=None, pooling=None, classes=1000)
         inp = Input(shape=self.obs_dim)
-        x = Conv2D(16, (3,3), activation="relu")(inp)
-        x = Conv2D(32, (3,3), activation="relu")(x)
-        x = Flatten()(x)
+        # x = Conv2D(16, (3,3), activation="relu")(inp)
+        # x = Conv2D(32, (3,3), activation="relu")(x)
+        # x = Flatten()(x)
         
+        x = Dense(128, activation="relu")(inp)
         x = Dense(64, activation="relu")(x)
-        x = Dense(128, activation="relu")(x)
         # x = LSTM(128, activation="relu")(x)
+        # x = Flatten()(x)
         output = Dense(self.n_actions, activation="linear")(x)
         
         model = Model(inputs=inp, outputs=output)
