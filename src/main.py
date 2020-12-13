@@ -7,15 +7,16 @@ from gym_maze.envs import MazeEnv
 from gym_maze.envs.generators import TMazeGenerator, RandomBlockMazeGenerator
 from gym_maze.envs.Astar_solver import AstarSolver
 
+import ray
+from ray.rllib.agents.ppo import PPOTrainer
+from ray.tune.registry import register_env
+
 from mem_buff import MemBuff
 
-maze = TMazeGenerator(3, [5, 3], [3, 3])
-# maze = RandomBlockMazeGenerator(maze_size=30, obstacle_ratio=0.2)
+# maze = TMazeGenerator(3, [5, 3], [3, 3])
+maze = RandomBlockMazeGenerator(maze_size=30, obstacle_ratio=0.2)
 env = MazeEnv(maze, action_type="Moore", render_trace=False)
-obs = env.reset()
-
-# plt.imshow(obs.reshape([21, 24]))
-# plt.show()
+[walls, obs] = env.reset()
 
 obs_dim = obs.shape
 n_actions = env.action_space.n
@@ -32,5 +33,16 @@ ideal_solution = solver.get_actions()
 print (ideal_solution)
 
 for action in solver.get_actions():
-    obs, reward, done, info = env.step(action)
-    # env.render()
+    [walls, obs], reward, done, info = env.step(action)
+    env.render()
+
+def env_creator(env_config):
+    return env
+    
+ray.init()    
+register_env("navmaze", env_creator)    
+    
+trainer = PPOTrainer(env="navmaze")
+
+while True:
+    print (trainer.train())
