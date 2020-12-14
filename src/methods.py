@@ -32,3 +32,16 @@ class Actor(snt.Module):
         action = dist.sample()
         
         return action, dist        
+                
+class Critic(snt.Module):
+    def __init__(self):
+        self.l1 = snt.Linear(64)
+        w_init = 1e-3
+        init = snt.initializers.RandomUniform(-w_init, w_init)
+        self.out = snt.Linear(1, initializer=init)
+        
+    def __call__(self, state):
+        x = tf.nn.relu(self.l1(state))
+        val = self.out(x)
+        
+        return val
