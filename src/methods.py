@@ -17,24 +17,23 @@ class Actor(snt.Module):
         self.log_std_layer = snt.Linear(dim_out, initializer=init)
         
     def __call__(self, state):
-        x = tf.relu(self.l1(state))
+        x = tf.nn.relu(self.l1(state))
         
-        mu = tf.tanh(self.mu_layer(x))
+        mu = tf.nn.tanh(self.mu_layer(x))
         
-        log_std = tf.tanh(self.log_std_layer(x))
-        log_std = 0.5 * self.ls_min + 
-                (self.ls_max - self.ls_min) * (log_std + 1)
+        log_std = tf.nn.tanh(self.log_std_layer(x))
+        log_std = 0.5 * self.ls_min + (self.ls_max - self.ls_min) * (log_std + 1)
                 
         std = tf.exp(log_std)
         
-        tfd = tfp.distributions
-        dist = tfd.Normal(mu, log_std)
+        distrib = tfp.distributions.Normal(mu, std)
         action = dist.sample()
         
-        return action, dist        
+        return action, distrib    
                 
 class Critic(snt.Module):
     def __init__(self):
+        super().__init__()
         self.l1 = snt.Linear(64)
         w_init = 1e-3
         init = snt.initializers.RandomUniform(-w_init, w_init)
