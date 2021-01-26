@@ -8,6 +8,9 @@ from gym_maze.envs import MazeEnv
 from gym_maze.envs.generators import TMazeGenerator, RandomBlockMazeGenerator
 from gym_maze.envs.Astar_solver import AstarSolver
 
+import ray
+from ray.rllib.agents.ppo import PPOTrainer
+from ray.tune.registry import register_env
 from methods import PPO_LSTM
 
 def display(mp):
@@ -47,7 +50,7 @@ display(num_moves_lookup)
 # while True:
 #     print (trainer.train())
 
-model = PPO_LSTM()
+model = PPO_LSTM(env.observation_space.shape[0], env.action_space.n)
 score = 0
 
 rewards = []

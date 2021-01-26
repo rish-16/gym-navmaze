@@ -6,13 +6,13 @@ from torch.utils import tensorboard
 import torch.optim as optim
 
 class PPO_LSTM(nn.Module):
-    def __init__(self):
+    def __init__(self, obs_dim, n_actions):
         super().__init__()
         self.data = []
         
-        self.fc1 = nn.Linear(6, 64)
+        self.fc1 = nn.Linear(obs_dim, 64)
         self.lstm = nn.LSTM(64, 32)
-        self.fc_pi = nn.Linear(32, 4)
+        self.fc_pi = nn.Linear(32, n_actions)
         self.fc_v = nn.Linear(32, 1)
         
         self.gamma = 0.98
