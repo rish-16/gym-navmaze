@@ -12,6 +12,7 @@ import ray
 import ray.rllib.agents.ppo as ppo
 from ray.rllib.agents.ppo import PPOTrainer
 from ray.tune.registry import register_env
+from ray.tune.logger import pretty_print
 from methods import PPO_LSTM
 
 def display(mp):
@@ -46,13 +47,20 @@ display(num_moves_lookup)
 ray.init()
 register_env("navmaze", lambda env_config : env)
 
+def on_episode_end(info):
+    episode = info["episode"]
+    srate = episode.user_data["last_pi_info_for"]["success_rate"]
+    episode.custom_metrics["agent_success_rate"] = srate
+
 config = ppo.DEFAULT_CONFIG.copy()
 config["model"]["use_lstm"] = True
 
 trainer = PPOTrainer(env="navmaze", config=config)
+trainer.restore("../ray_results5/")
 
-while True:
-    print (trainer.train())
+for _ in range(1500000):
+    res = trainer.train()
+    print (pretty_print(res))
 
 # model = PPO_LSTM(env.observation_space.shape[0], env.action_space.n)
 # score = 0
