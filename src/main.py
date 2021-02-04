@@ -1,3 +1,4 @@
+import logging
 import gym, torch, gym_maze
 from torch.distributions import Categorical
 import numpy as np
@@ -47,16 +48,10 @@ display(num_moves_lookup)
 ray.init()
 register_env("navmaze", lambda env_config : env)
 
-def on_episode_end(info):
-    episode = info["episode"]
-    srate = episode.user_data["last_pi_info_for"]["success_rate"]
-    episode.custom_metrics["agent_success_rate"] = srate
-
 config = ppo.DEFAULT_CONFIG.copy()
 config["model"]["use_lstm"] = True
 
 trainer = PPOTrainer(env="navmaze", config=config)
-trainer.restore("../ray_results5/")
 
 for _ in range(1500000):
     res = trainer.train()
