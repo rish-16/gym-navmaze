@@ -9,12 +9,7 @@ from gym_maze.envs import MazeEnv
 from gym_maze.envs.generators import TMazeGenerator, RandomBlockMazeGenerator
 from gym_maze.envs.Astar_solver import AstarSolver
 
-import ray
-import ray.rllib.agents.ppo as ppo
-from ray.rllib.agents.ppo import PPOTrainer
-from ray.tune.registry import register_env
-from ray.tune.logger import pretty_print
-from methods import PPO_LSTM
+from methods import PPO
 
 def display(mp):
     for i in range(len(mp)):
@@ -45,55 +40,46 @@ for s in env.free_spaces:
 env.lookup_table = num_moves_lookup
 display(num_moves_lookup)
 
-ray.init()
-register_env("navmaze", lambda env_config : env)
+learning_rate = 0.0005
+gamma         = 0.98
+lmbda         = 0.95
+eps_clip      = 0.1
+K_epoch       = 3
+T_horizon     = 20
 
-config = ppo.DEFAULT_CONFIG.copy()
-config["model"]["use_lstm"] = True
+model = PPO()
+score = 0.0
+print_interval = 20
 
-trainer = PPOTrainer(env="navmaze", config=config)
+all_frames = []
 
-for _ in range(1500000):
-    res = trainer.train()
-    print (pretty_print(res))
+for n_epi in range(10000):
+    s, frame = env.reset()
+    all_frames.append(frame)
+    done = False
 
-# model = PPO_LSTM(env.observation_space.shape[0], env.action_space.n)
-# score = 0
+    while not done:
+        for t in range(T_horizon):
+            prob = model.pi(torch.from_numpy(s).float())
+            m = Categorical(prob)
+            a = m.sample().item()
+            s_prime, r, done, info = env.step(a)
+            all_frames.append(info['frame'])
 
-# rewards = []
-# success_rate = 0
+            model.put_data((s, a, r/100.0, s_prime, prob[a].item(), done)) 
+            s = s_prime
 
-# for ep in range(1000000):
-#     h_out = (torch.zeros([1, 1, 32], dtype=torch.float), torch.zeros([1, 1, 32], dtype=torch.float))
-#     s = env.reset()
-#     done = False
-    
-#     while not done:
-#         for t in range(T_horizon):
-#             h_in = h_out
-#             prob, h_out = model.pi(torch.from_numpy(s).float(), h_in)
-#             prob = prob.view(-1)
-#             m = Categorical(prob)
-#             action = m.sample().item()
-#             s_prime, r, done, info = env.step(action)
-#             rewards.append(r)
-            
-#             model.put_data((s, action, r, s_prime, prob[action].item(), h_in, h_out, done))
-#             s = s_prime
-            
-#             score += r
-#             if done:
-#                 done = True
-#                 success_rate += 1
-#                 break
-                
-#         model.train()
-        
-#     if (ep % 20 == 0 and ep != 0):
-#         print ("# of episode : {} | avg score : {:.1f}".format(ep, score/20))
-#         score = 0.0
-        
-# env.close()
-# print (success_rate)
-# plt.plot(list(range(1000000)), rewards)
-# plt.show()
+            score += r
+
+            if done:
+                break
+
+        model.train_net()
+
+    if n_epi % print_interval == 0 and n_epi != 0:
+        print("# of episode :{}, avg score : {:.1f}".format(n_epi, score/print_interval))
+        score = 0.0
+
+print (len(all_frames))
+
+env.close()
