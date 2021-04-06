@@ -30,6 +30,7 @@ class PPO(nn.Module):
         self.fc_v  = nn.Linear(256, 1)
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
 
+    # change this to LSTM policy
     def pi(self, x, softmax_dim = 0):
         x = F.relu(self.fc1(x))
         x = self.fc_pi(x)
