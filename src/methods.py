@@ -1,93 +1,80 @@
-import numpy as np
-import torch, time
-from torch import nn
-from torch.nn import functional as F
-from torch.utils import tensorboard
-import torch.optim as optim
-
-import gym
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 from torch.distributions import Categorical
 
-#Hyperparameters
-learning_rate = 0.0005
-gamma         = 0.98
-lmbda         = 0.95
-eps_clip      = 0.1
-K_epoch       = 3
-T_horizon     = 20
+"""
+Credits to https://github.com/4kasha/CartPole_PPO
+"""
 
-class PPO(nn.Module):
-    def __init__(self):
-        super(PPO, self).__init__()
-        self.data = []
+
+def layer_init(layer, scale=1.0):
+    nn.init.orthogonal_(layer.weight.data)
+    layer.weight.data.mul_(scale)
+    nn.init.constant_(layer.bias.data, 0)
+    return layer
+
+class FCNet(nn.Module):
+    """Fully Connected Model."""
+    def __init__(self, state_size, seed, hidden_layers, use_reset, act_fnc=F.relu):
+        """Initialize parameters and build model.
+        Params
+        ======
+            state_size (int): Dimension of each state
+            seed (int): Random seed
+            hidden_layers (list): Size of hidden_layers
+            act_fnc : Activation function
+            use_reset (bool): Weights initialization
+        """
+        super(FCNet, self).__init__()
+        self.seed = torch.manual_seed(seed)
+        dims = [state_size, ] + hidden_layers
+        if use_reset:
+            self.layers = nn.ModuleList([layer_init(nn.Linear(in_put, out_put)) for in_put, out_put in zip(dims[:-1], dims[1:])])
+        else:
+            self.layers = nn.ModuleList([nn.Linear(in_put, out_put) for in_put, out_put in zip(dims[:-1], dims[1:])])
+        self.act_fuc = act_fnc 
+        self.feature_dim = dims[-1]
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = self.act_fuc(layer(x))
+        return x
+
+class Policy(nn.Module):
+    """Actor Critic Model (shared weights)"""
+    def __init__(self, state_size, action_size, seed, main_net):
+        """Initialize parameters and build model.
+        Params
+        ======
+            state_size (int): Dimension of each state
+            action_size (int): Dimension of each action
+            seed (int): Random seed
+            main_net (model): Common net for actor and critic 
+        """
+        super(Policy, self).__init__()
+        self.seed = torch.manual_seed(seed)
         
-        self.fc1   = nn.Linear(6, 256)
-        self.fc_pi = nn.Linear(256, 2)
-        self.fc_v  = nn.Linear(256, 1)
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-
-    # change this to LSTM policy
-    def pi(self, x, softmax_dim = 0):
-        x = F.relu(self.fc1(x))
-        x = self.fc_pi(x)
-        prob = F.softmax(x, dim=softmax_dim)
-        return prob
+        self.main_net = main_net
+        
+        self.fc_actor = layer_init(nn.Linear(main_net.feature_dim, action_size), 1e-3)
+        self.fc_critic = layer_init(nn.Linear(main_net.feature_dim, 1), 1e-3)
     
-    def v(self, x):
-        x = F.relu(self.fc1(x))
-        v = self.fc_v(x)
-        return v
-      
-    def put_data(self, transition):
-        self.data.append(transition)
+    def forward(self, state):
+        x = self.main_net(state)
+        pi_a = self.fc_actor(x)
+        prob = F.softmax(pi_a, dim=1)
+        v = self.fc_critic(x)
+        return prob, v        
         
-    def make_batch(self):
-        s_lst, a_lst, r_lst, s_prime_lst, prob_a_lst, done_lst = [], [], [], [], [], []
-        for transition in self.data:
-            s, a, r, s_prime, prob_a, done = transition
-            
-            s_lst.append(s)
-            a_lst.append([a])
-            r_lst.append([r])
-            s_prime_lst.append(s_prime)
-            prob_a_lst.append([prob_a])
-            done_mask = 0 if done else 1
-            done_lst.append([done_mask])
-            
-        s,a,r,s_prime,done_mask, prob_a = torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), \
-                                          torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), \
-                                          torch.tensor(done_lst, dtype=torch.float), torch.tensor(prob_a_lst)
-        self.data = []
-        return s, a, r, s_prime, done_mask, prob_a
-        
-    def train_net(self):
-        s, a, r, s_prime, done_mask, prob_a = self.make_batch()
-
-        for i in range(K_epoch):
-            td_target = r + gamma * self.v(s_prime) * done_mask
-            delta = td_target - self.v(s)
-            delta = delta.detach().numpy()
-
-            advantage_lst = []
-            advantage = 0.0
-            for delta_t in delta[::-1]:
-                advantage = gamma * lmbda * advantage + delta_t[0]
-                advantage_lst.append([advantage])
-            advantage_lst.reverse()
-            advantage = torch.tensor(advantage_lst, dtype=torch.float)
-
-            pi = self.pi(s, softmax_dim=1)
-            pi_a = pi.gather(1,a)
-            ratio = torch.exp(torch.log(pi_a) - torch.log(prob_a))  # a/b == exp(log(a)-log(b))
-
-            surr1 = ratio * advantage
-            surr2 = torch.clamp(ratio, 1-eps_clip, 1+eps_clip) * advantage
-            loss = -torch.min(surr1, surr2) + F.smooth_l1_loss(self.v(s) , td_target.detach())
-
-            self.optimizer.zero_grad()
-            loss.mean().backward()
-            self.optimizer.step()
+    def act(self, state, action=None):
+        prob, v = self.forward(state)
+        dist = Categorical(prob)
+        if action is None:
+            action = dist.sample()
+        log_prob = dist.log_prob(action)
+        entropy = dist.entropy()
+        return {'a': action,
+                'log_pi_a': log_prob,
+                'ent': entropy,
+                'v': v.squeeze()}

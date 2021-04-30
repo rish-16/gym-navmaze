@@ -21,10 +21,9 @@ def display(mp):
 
 MAZE_SIZE = 7
 maze = RandomBlockMazeGenerator(maze_size=MAZE_SIZE-1, obstacle_ratio=0.2)
-env = MazeEnv(maze, size=14, action_type="Moore", render_trace=False)
+env = MazeEnv(maze, size=14, action_type="VonNeumann", render_trace=False)
 env.seed(1)
 num_moves_lookup = [[np.inf for j in range(MAZE_SIZE)] for i in range(MAZE_SIZE)]
-T_horizon = 20
 
 print (env.goal_states[0])
 
@@ -44,14 +43,14 @@ display(num_moves_lookup)
 
 T_horizon = 40
 
-model = PPO()
+model = PPO(6, 4)
 score = 0.0
 print_interval = 2
 
 all_frames = []
 traces = []
 
-for n_epi in range(5):
+for n_epi in range(100):
     s, frame = env.reset()
     done = False
 
@@ -64,9 +63,10 @@ for n_epi in range(5):
     t = 0
     while not done and t < T_horizon:
         env.render()
-        prob = model.pi(torch.from_numpy(s).float())
+        prob = model.pi(torch.from_numpy(s).flatten().float())
         m = Categorical(prob)
         a = m.sample().item()
+        print (a, m)
         s_prime, r, done, info = env.step(a)
         
         # log action-frame history
